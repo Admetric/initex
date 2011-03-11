@@ -31,6 +31,8 @@
 #include <sys/resource.h>
 #include <linux/loop.h>
 #include <dirent.h>
+#include <libgen.h>
+#include <limits.h>
 
 #include "init.h"
 #include "keywords.h"
@@ -40,6 +42,7 @@
 #include <private/android_filesystem_config.h>
 
 void add_environment(const char *name, const char *value);
+int copy(char *src, char *dst);
 
 extern int init_module(void *, unsigned long, const char *);
 
@@ -267,35 +270,12 @@ static struct {
     { 0,            0 },
 };
 
-/* mount <type> <device> <path> <flags ...> <options> */
-int do_mount(int nargs, char **args)
+
+int mount_fs(char *system, char *source, char *target, unsigned flags, char *options)
 {
     char tmp[64];
-    char *source, *target, *system;
-    char *options = NULL;
-    unsigned flags = 0;
-    int n, i;
-
-    for (n = 4; n < nargs; n++) {
-        for (i = 0; mount_flags[i].name; i++) {
-            if (!strcmp(args[n], mount_flags[i].name)) {
-                flags |= mount_flags[i].flag;
-                break;
-            }
-        }
-
-        /* if our last argument isn't a flag, wolf it up as an option string */
-        if (n + 1 == nargs && !mount_flags[i].name)
-            options = args[n];
-    }
-
-    system = args[1];
-    source = args[2];
-    target = args[3];
-    INFO("mount ");
-    INFO("    system: %s", system);
-    INFO("    source: %s", source);
-    INFO("    target: %s", target);
+    struct stat info;
+		int n;
 
     if (!strncmp(source, "mtd@", 4)) {
         n = mtd_name_to_number(source + 4);
@@ -304,10 +284,13 @@ int do_mount(int nargs, char **args)
         }
 
         sprintf(tmp, "/dev/mtdblock%d", n);
+        if (stat(source, &info) < 0)
+            sprintf(tmp, "/dev/block/mtdblock%d", n);
 
-        if (mount(tmp, target, system, flags, options) < 0) {
+				INFO("mount(%s,%s,%s,...)\n",tmp,target,system);
+        if (mount(tmp, target, system, flags, options) < 0)
             return -1;
-        }
+
         DIR *dp;
         struct dirent *ep;
         INFO("After mount lising of %s",target);
@@ -372,6 +355,41 @@ int do_mount(int nargs, char **args)
         return 0;
     }
 }
+
+/* mount <type> <device> <path> <flags ...> <options> */
+int do_mount(int nargs, char **args)
+{
+    char *source, *target, *system;
+    char *options = NULL;
+    unsigned flags = 0;
+    int n, i;
+
+    for (n = 4; n < nargs; n++) {
+        for (i = 0; mount_flags[i].name; i++) {
+            if (!strcmp(args[n], mount_flags[i].name)) {
+                flags |= mount_flags[i].flag;
+                break;
+            }
+        }
+
+        /* if our last argument isn't a flag, wolf it up as an option string */
+        if (n + 1 == nargs && !mount_flags[i].name)
+            options = args[n];
+    }
+
+    system = args[1];
+    source = args[2];
+    target = args[3];
+
+    INFO("mount ");
+    INFO("     system: %s", system);
+    INFO("     source: %s", source);
+    INFO("     target: %s", target);
+    INFO("    options: %s", options);
+
+    return mount_fs(system, source, target, flags, options);
+}
+
 
 int do_setkey(int nargs, char **args)
 {
@@ -460,7 +478,62 @@ int do_write(int nargs, char **args)
     return write_file(args[1], args[2]);
 }
 
-int do_copy(int nargs, char **args)
+
+int copy_dir(char *src, char *dst)
+{
+    DIR *dp;
+    struct stat src_info;
+		struct stat dst_info;
+    struct dirent *ep;
+    int rc = 0;
+    char next_dst[PATH_MAX];
+    char next_src[PATH_MAX];
+
+    if (src == NULL)
+        return -1;
+
+    if (dst == NULL)
+        return -1;
+
+    if (stat(src, &src_info) < 0)
+        return -1;
+
+    if ((src_info.st_dev & S_IFMT) != S_IFDIR)
+        return -1;
+
+    if(stat(dst, &dst_info) < 0)
+        if (mkdir(dst, src_info.st_mode))
+            return -errno;
+
+    if (chown(dst, src_info.st_uid, src_info.st_gid))
+        return -errno;
+
+    dp = opendir (src);
+    if (dp != NULL)
+    {
+        while ((ep = readdir (dp)))
+        {
+            memset(next_dst,0,PATH_MAX);
+            memset(next_src,0,PATH_MAX);
+            snprintf(next_dst,PATH_MAX,"%s/%s",dst,ep->d_name);
+            strncpy(next_src,ep->d_name,PATH_MAX);
+            rc = copy(next_src,next_dst);
+            if (rc != 0)
+                return rc;
+        }
+        (void) closedir (dp);
+    }
+    else
+    {
+        printf("copy couldn't open the directory %s\n",src);
+        return -errno;
+    }
+
+    return 0;
+}
+
+
+int copy(char *src, char *dst)
 {
     char *buffer = NULL;
     int rc = 0;
@@ -469,16 +542,24 @@ int do_copy(int nargs, char **args)
     int brtw, brtr;
     char *p;
 
-    if (nargs != 3)
+    INFO("copy %s => %s\n",src,dst);
+
+    if (src == NULL)
         return -1;
 
-    if (stat(args[1], &info) < 0)
+    if (dst == NULL)
         return -1;
 
-    if ((fd1 = open(args[1], O_RDONLY)) < 0)
+    if (stat(src, &info) < 0)
+        return -1;
+
+    if ((info.st_dev & S_IFMT) == S_IFDIR)
+        return copy_dir(src,dst);
+
+    if ((fd1 = open(src, O_RDONLY)) < 0)
         goto out_err;
 
-    if ((fd2 = open(args[2], O_WRONLY|O_CREAT|O_TRUNC, 0660)) < 0)
+    if ((fd2 = open(dst, O_WRONLY|O_CREAT|O_TRUNC, 0660)) < 0)
         goto out_err;
 
     if (!(buffer = malloc(info.st_size)))
@@ -508,9 +589,13 @@ int do_copy(int nargs, char **args)
         brtw -= rc;
     }
 
+
+    chown(dst, info.st_uid, info.st_gid);
+
     rc = 0;
     goto out;
 out_err:
+    printf("copy could not copy to %s\n",dst);
     rc = -1;
 out:
     if (buffer)
@@ -520,6 +605,21 @@ out:
     if (fd2 >= 0)
         close(fd2);
     return rc;
+}
+
+int do_copy(int nargs, char **args)
+{
+    char *buffer = NULL;
+    int rc = 0;
+    int fd1 = -1, fd2 = -1;
+    struct stat info;
+    int brtw, brtr;
+    char *p;
+
+    if (nargs != 3)
+        return -1;
+
+    return copy(args[1],args[2]);
 }
 
 int do_chown(int nargs, char **args) {
@@ -590,4 +690,60 @@ int do_device(int nargs, char **args) {
     add_devperms_partners(source, get_mode(args[2]), decode_uid(args[3]),
                           decode_uid(args[4]), prefix);
     return 0;
+}
+
+int do_update(int nargs, char **args) {
+    char *src;
+    char *src_fs;
+    char *dst;
+    char *dst_fs;
+    mode_t mode = 0755;
+    struct stat info;
+    int rc = 0;
+
+		INFO("preparing update...\n");
+
+    /* args[0] is the command name */
+    if(nargs < 5)
+       return -1;
+
+    src_fs = args[1];
+    src = args[2];
+    dst_fs = args[3];
+    dst = args[4];
+
+    INFO("update %s %s %s %s\n",src,src_fs,dst,dst_fs);
+    if(mkdir("/update",mode))
+        goto error;
+
+    if(mkdir("/update/src",mode))
+        goto error;
+
+    if(mkdir("/update/dst",mode))
+        goto error;
+
+    if(mount_fs(src_fs,src,"/update/src",0,""))
+        goto error;
+
+    if(mount_fs(dst_fs,dst,"/update/dst",0,""))
+        goto error;
+
+    /* Do the copy */
+    if(stat("/update/src/update-disk",&info) < 0)
+        goto error;
+
+    rc = copy(src,dst);
+    goto done;
+
+error:
+    rc = -errno;
+
+done:
+    unlink("/update/dst/update-disk");
+    umount("/update/dst");
+    umount("/update/src");
+    rmdir("/update/dst");
+    rmdir("/update/src");
+    rmdir("/update");
+    return rc;
 }
