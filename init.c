@@ -86,7 +86,7 @@ static const char *ENV[32];
 int add_environment(const char *key, const char *val)
 {
     int n;
- 
+
     for (n = 0; n < 31; n++) {
         if (!ENV[n]) {
             size_t len = strlen(key) + strlen(val) + 2;
@@ -168,7 +168,7 @@ void service_start(struct service *svc, const char *dynamic_args)
          */
     svc->flags &= (~(SVC_DISABLED|SVC_RESTARTING));
     svc->time_started = 0;
-    
+
         /* running processes require no additional work -- if
          * they're in the process of exiting, we've ensured
          * that they will immediately restart on exit, unless
@@ -217,7 +217,7 @@ void service_start(struct service *svc, const char *dynamic_args)
 
         for (si = svc->sockets; si; si = si->next) {
             int s = create_socket(si->name,
-                                  !strcmp(si->type, "dgram") ? 
+                                  !strcmp(si->type, "dgram") ?
                                   SOCK_DGRAM : SOCK_STREAM,
                                   si->perm, si->uid, si->gid);
             if (s >= 0) {
@@ -454,7 +454,7 @@ static void msg_start(const char *name)
 
         svc = service_find_by_name(tmp);
     }
-    
+
     if (svc) {
         service_start(svc, args);
     } else {
@@ -543,7 +543,7 @@ static void find_mtd_partitions(void)
     close(fd);
 }
 
-int mtd_name_to_number(const char *name) 
+int mtd_name_to_number(const char *name)
 {
     int n;
     if (mtd_part_count < 0) {
@@ -747,7 +747,7 @@ int open_keychord()
     int fd, ret;
 
     service_for_each(add_service_keycodes);
-    
+
     /* nothing to do if no services require keychords */
     if (!keychords)
         return -1;
@@ -850,7 +850,7 @@ int main(int argc, char **argv)
          */
     open_devnull_stdio();
     log_init();
-    
+
     INFO("reading config file\n");
     parse_config_file("/init.rc");
 
@@ -869,7 +869,7 @@ int main(int argc, char **argv)
     device_fd = device_init();
 
     property_init();
-    
+
     // only listen for keychords if ro.debuggable is true
     keychord_fd = open_keychord();
 
@@ -908,7 +908,7 @@ int main(int argc, char **argv)
     }
 
     if (qemu[0])
-        import_kernel_cmdline(1); 
+        import_kernel_cmdline(1);
 
     if (!strcmp(bootmode,"factory"))
         property_set("ro.factorytest", "1");
@@ -965,8 +965,8 @@ int main(int argc, char **argv)
     queue_all_property_triggers();
     drain_action_queue();
 
-        /* enable property triggers */   
-    property_triggers_enabled = 1;     
+        /* enable property triggers */
+    property_triggers_enabled = 1;
 
     ufds[0].fd = device_fd;
     ufds[0].events = POLLIN;
