@@ -287,7 +287,7 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
         if (stat(source, &info) < 0)
             sprintf(tmp, "/dev/block/mtdblock%d", n);
 
-				INFO("mount(%s,%s,%s,...)\n",tmp,target,system);
+        INFO("mount(%s,%s,%s,...)\n",tmp,target,system);
         if (mount(tmp, target, system, flags, options) < 0)
             return -1;
 
@@ -313,15 +313,17 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
 
         mode = (flags & MS_RDONLY) ? O_RDONLY : O_RDWR;
         fd = open(source + 5, mode);
+        rc = -errno;
         if (fd < 0) {
-            return -1;
+            return rc;
         }
 
         for (n = 0; ; n++) {
             sprintf(tmp, "/dev/block/loop%d", n);
             loop = open(tmp, mode);
+            rc = -errno;
             if (loop < 0) {
-                return -1;
+                return rc;
             }
 
             /* if it is a blank loop device */
@@ -331,9 +333,10 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
                     close(fd);
 
                     if (mount(tmp, target, system, flags, options) < 0) {
+                        rc = -errno;
                         ioctl(loop, LOOP_CLR_FD, 0);
                         close(loop);
-                        return -1;
+                        return rc;
                     }
 
                     close(loop);
@@ -349,7 +352,7 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
         return -1;
     } else {
         if (mount(source, target, system, flags, options) < 0) {
-            return -1;
+            return -errno;
         }
 
         return 0;
@@ -483,7 +486,7 @@ int copy_dir(char *src, char *dst)
 {
     DIR *dp;
     struct stat src_info;
-		struct stat dst_info;
+    struct stat dst_info;
     struct dirent *ep;
     int rc = 0;
     char next_dst[PATH_MAX];
@@ -693,20 +696,21 @@ int do_device(int nargs, char **args) {
 }
 
 int do_update(int nargs, char **args) {
-    char *src;
-    char *src_fs;
-    char *dst;
-    char *dst_fs;
+    char *src = NULL;
+    char *src_fs = NULL;
+    char *dst = NULL;
+    char *dst_fs = NULL;
     mode_t mode = 0755;
     struct stat info;
     int rc = 0;
 
-		INFO("preparing update...\n");
+    INFO("preparing update... %d\n",nargs);
 
     /* args[0] is the command name */
     if(nargs < 5)
        return -1;
 
+    memset(&info,0,sizeof(struct stat));
     src_fs = args[1];
     src = args[2];
     dst_fs = args[3];
