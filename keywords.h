@@ -13,6 +13,7 @@ int do_insmod(int nargs, char **args);
 int do_import(int nargs, char **args);
 int do_mkdir(int nargs, char **args);
 int do_mount(int nargs, char **args);
+int do_update(int nargs, char **args);
 int do_restart(int nargs, char **args);
 int do_setkey(int nargs, char **args);
 int do_setprop(int nargs, char **args);
@@ -28,7 +29,6 @@ int do_chown(int nargs, char **args);
 int do_chmod(int nargs, char **args);
 int do_loglevel(int nargs, char **args);
 int do_device(int nargs, char **args);
-int do_update(int nargs, char **args);
 #define __MAKE_KEYWORD_ENUM__
 #define KEYWORD(symbol, flags, nargs, func) K_##symbol,
 enum {
@@ -54,6 +54,7 @@ enum {
     KEYWORD(keycodes,    OPTION,  0, 0)
     KEYWORD(mkdir,       COMMAND, 1, do_mkdir)
     KEYWORD(mount,       COMMAND, 3, do_mount)
+    KEYWORD(update,      COMMAND, 4, do_update)
     KEYWORD(on,          SECTION, 0, 0)
     KEYWORD(oneshot,     OPTION,  0, 0)
     KEYWORD(onrestart,   OPTION,  0, 0)
@@ -77,7 +78,6 @@ enum {
     KEYWORD(loglevel,    COMMAND, 1, do_loglevel)
     KEYWORD(device,      COMMAND, 4, do_device)
     KEYWORD(ioprio,      OPTION,  0, 0)
-    KEYWORD(update,      COMMAND, 4, do_update)
 #ifdef __MAKE_KEYWORD_ENUM__
     KEYWORD_COUNT,
 };
