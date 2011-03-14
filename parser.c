@@ -31,7 +31,7 @@ void DUMP(void)
     struct listnode *node2;
     struct socketinfo *si;
     int n;
-    
+
     list_for_each(node, &service_list) {
         svc = node_to_item(node, struct service, slist);
         RAW("service %s\n", svc->name);
@@ -59,7 +59,7 @@ void DUMP(void)
         }
         RAW("\n");
     }
-#endif       
+#endif
 }
 
 #define T_EOF 0
@@ -88,7 +88,7 @@ void parse_error(struct parse_state *state, const char *fmt, ...)
     va_list ap;
     char buf[128];
     int off;
-    
+
     snprintf(buf, 128, "%s: %d: ", state->filename, state->line);
     buf[127] = 0;
     off = strlen(buf);
@@ -116,7 +116,7 @@ struct {
     unsigned char flags;
 } keyword_info[KEYWORD_COUNT] = {
     [ K_UNKNOWN ] = { "unknown", 0, 0, 0 },
-#include "keywords.h"    
+#include "keywords.h"
 };
 #undef KEYWORD
 
@@ -197,6 +197,7 @@ int lookup_keyword(const char *s)
         break;
     case 'u':
         if (!strcmp(s, "ser")) return K_user;
+        if (!strcmp(s, "pdate")) return K_update;
         break;
     case 'w':
         if (!strcmp(s, "rite")) return K_write;
@@ -518,8 +519,8 @@ void queue_property_triggers(const char *name, const char *value)
         if (!strncmp(act->name, "property:", strlen("property:"))) {
             const char *test = act->name + strlen("property:");
             int name_length = strlen(name);
-            
-            if (!strncmp(name, test, name_length) && 
+
+            if (!strncmp(name, test, name_length) &&
                     test[name_length] == '=' &&
                     !strcmp(test + name_length + 1, value)) {
                 action_add_queue_tail(act);
@@ -548,7 +549,7 @@ void queue_all_property_triggers()
                 } else {
                     memcpy(prop_name, name, length);
                     prop_name[length] = 0;
-                    
+
                     /* does the property exist, and match the trigger value? */
                     value = property_get(prop_name);
                     if (value && !strcmp(equals + 1, value)) {
@@ -594,7 +595,7 @@ static void *parse_service(struct parse_state *state, int nargs, char **args)
         parse_error(state, "ignored duplicate definition of service '%s'\n", args[1]);
         return 0;
     }
-    
+
     nargs -= 2;
     svc = calloc(1, sizeof(*svc) + sizeof(char*) * nargs);
     if (!svc) {
@@ -621,7 +622,7 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
     if (nargs == 0) {
         return;
     }
-    
+
     svc->ioprio_class = IoSchedClass_NONE;
 
     kw = lookup_keyword(args[0]);
