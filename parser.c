@@ -178,6 +178,7 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "nrestart")) return K_onrestart;
         break;
     case 'r':
+        if (!strcmp(s, "mdir")) return K_rmdir;
         if (!strcmp(s, "estart")) return K_restart;
         break;
     case 's':
@@ -198,6 +199,7 @@ int lookup_keyword(const char *s)
     case 'u':
         if (!strcmp(s, "ser")) return K_user;
         if (!strcmp(s, "pdate")) return K_update;
+        if (!strcmp(s, "mount")) return K_umount;
         break;
     case 'w':
         if (!strcmp(s, "rite")) return K_write;

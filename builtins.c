@@ -225,6 +225,21 @@ int do_import(int nargs, char **args)
     return parse_config_file(args[1]);
 }
 
+int do_rmdir(int nargs, char **args)
+{
+    char *path = NULL;
+    int rc = 0;
+
+    if(nargs != 2)
+        return -1;
+
+    path = args[1];
+    if(rmdir(path))
+        return -errno;
+
+    return 0;
+}
+
 int do_mkdir(int nargs, char **args)
 {
     mode_t mode = 0755;
@@ -357,6 +372,20 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
 
         return 0;
     }
+}
+
+int do_umount(int nargs, char **args)
+{
+    char *path = NULL;
+
+    if(nargs != 2)
+        return -1;
+
+    path = args[1];
+    if(umount(path))
+        return -errno;
+
+    return 0;
 }
 
 /* mount <type> <device> <path> <flags ...> <options> */

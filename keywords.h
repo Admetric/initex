@@ -12,7 +12,9 @@ int do_ifup(int nargs, char **args);
 int do_insmod(int nargs, char **args);
 int do_import(int nargs, char **args);
 int do_mkdir(int nargs, char **args);
+int do_rmdir(int nargs, char **args);
 int do_mount(int nargs, char **args);
+int do_umount(int nargs, char **args);
 int do_update(int nargs, char **args);
 int do_restart(int nargs, char **args);
 int do_setkey(int nargs, char **args);
@@ -52,8 +54,10 @@ enum {
     KEYWORD(insmod,      COMMAND, 1, do_insmod)
     KEYWORD(import,      COMMAND, 1, do_import)
     KEYWORD(keycodes,    OPTION,  0, 0)
+    KEYWORD(rmdir,       COMMAND, 1, do_rmdir)
     KEYWORD(mkdir,       COMMAND, 1, do_mkdir)
     KEYWORD(mount,       COMMAND, 3, do_mount)
+    KEYWORD(umount,      COMMAND, 1, do_umount)
     KEYWORD(update,      COMMAND, 4, do_update)
     KEYWORD(on,          SECTION, 0, 0)
     KEYWORD(oneshot,     OPTION,  0, 0)
