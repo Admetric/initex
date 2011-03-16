@@ -775,8 +775,8 @@ int open_keychord()
 void handle_keychord(int fd)
 {
     struct service *svc;
-    char* debuggable;
-    char* adb_enabled;
+    const char* debuggable;
+    const char* adb_enabled;
     int ret;
     __u16 id;
 
@@ -824,13 +824,16 @@ int main(int argc, char **argv)
     act.sa_restorer = NULL;
     sigaction(SIGCHLD, &act, 0);
 
+    printf("init started...\n");
+    fflush(stdout);
+
     /* clear the umask */
     umask(0);
 
-        /* Get the basic filesystem setup we need put
-         * together in the initramdisk on / and then we'll
-         * let the rc file figure out the rest.
-         */
+    /* Get the basic filesystem setup we need put
+     * together in the initramdisk on / and then we'll
+     * let the rc file figure out the rest.
+     */
     mkdir("/dev", 0755);
     mkdir("/proc", 0755);
     mkdir("/sys", 0755);
@@ -842,12 +845,12 @@ int main(int argc, char **argv)
     mount("proc", "/proc", "proc", 0, NULL);
     mount("sysfs", "/sys", "sysfs", 0, NULL);
 
-        /* We must have some place other than / to create the
-         * device nodes for kmsg and null, otherwise we won't
-         * be able to remount / read-only later on.
-         * Now that tmpfs is mounted on /dev, we can actually
-         * talk to the outside world.
-         */
+    /* We must have some place other than / to create the
+     * device nodes for kmsg and null, otherwise we won't
+     * be able to remount / read-only later on.
+     * Now that tmpfs is mounted on /dev, we can actually
+     * talk to the outside world.
+     */
     open_devnull_stdio();
     log_init();
 
@@ -874,48 +877,48 @@ int main(int argc, char **argv)
     keychord_fd = open_keychord();
 
     if (console[0]) {
-        snprintf(tmp, sizeof(tmp), "/dev/%s", console);
-        console_name = strdup(tmp);
+      snprintf(tmp, sizeof(tmp), "/dev/%s", console);
+      console_name = strdup(tmp);
     }
 
     fd = open(console_name, O_RDWR);
     if (fd >= 0)
-        have_console = 1;
+      have_console = 1;
     close(fd);
 
     if( load_565rle_image(INIT_IMAGE_FILE) ) {
-    fd = open("/dev/tty0", O_WRONLY);
-    if (fd >= 0) {
+      fd = open("/dev/tty0", O_WRONLY);
+      if (fd >= 0) {
         const char *msg;
-            msg = "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"  // console is 40 cols x 30 lines
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "             A N D R O I D ";
+        msg = "\n"
+          "\n"
+          "\n"
+          "\n"
+          "\n"
+          "\n"
+          "\n"  // console is 40 cols x 30 lines
+          "\n"
+          "\n"
+          "\n"
+          "\n"
+          "\n"
+          "\n"
+          "\n"
+          "             A N D R O I D ";
         write(fd, msg, strlen(msg));
         close(fd);
-    }
+      }
     }
 
     if (qemu[0])
-        import_kernel_cmdline(1);
+      import_kernel_cmdline(1);
 
     if (!strcmp(bootmode,"factory"))
-        property_set("ro.factorytest", "1");
+      property_set("ro.factorytest", "1");
     else if (!strcmp(bootmode,"factory2"))
-        property_set("ro.factorytest", "2");
+      property_set("ro.factorytest", "2");
     else
-        property_set("ro.factorytest", "0");
+      property_set("ro.factorytest", "0");
 
     property_set("ro.serialno", serialno[0] ? serialno : "");
     property_set("ro.bootmode", bootmode[0] ? bootmode : "unknown");
@@ -927,33 +930,33 @@ int main(int argc, char **argv)
     snprintf(tmp, PROP_VALUE_MAX, "%d", revision);
     property_set("ro.revision", tmp);
 
-        /* execute all the boot actions to get us started */
+    /* execute all the boot actions to get us started */
     action_for_each_trigger("init", action_add_queue_tail);
     drain_action_queue();
 
-        /* read any property files on system or data and
-         * fire up the property service.  This must happen
-         * after the ro.foo properties are set above so
-         * that /data/local.prop cannot interfere with them.
-         */
+    /* read any property files on system or data and
+     * fire up the property service.  This must happen
+     * after the ro.foo properties are set above so
+     * that /data/local.prop cannot interfere with them.
+     */
     property_set_fd = start_property_service();
 
     /* create a signalling mechanism for the sigchld handler */
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, s) == 0) {
-        signal_fd = s[0];
-        signal_recv_fd = s[1];
-        fcntl(s[0], F_SETFD, FD_CLOEXEC);
-        fcntl(s[0], F_SETFL, O_NONBLOCK);
-        fcntl(s[1], F_SETFD, FD_CLOEXEC);
-        fcntl(s[1], F_SETFL, O_NONBLOCK);
+      signal_fd = s[0];
+      signal_recv_fd = s[1];
+      fcntl(s[0], F_SETFD, FD_CLOEXEC);
+      fcntl(s[0], F_SETFL, O_NONBLOCK);
+      fcntl(s[1], F_SETFD, FD_CLOEXEC);
+      fcntl(s[1], F_SETFL, O_NONBLOCK);
     }
 
     /* make sure we actually have all the pieces we need */
     if ((device_fd < 0) ||
         (property_set_fd < 0) ||
         (signal_recv_fd < 0)) {
-        ERROR("init startup failure\n");
-        return 1;
+      ERROR("init startup failure\n");
+      return 1;
     }
 
     /* execute all the boot actions to get us started */
@@ -961,11 +964,11 @@ int main(int argc, char **argv)
     action_for_each_trigger("boot", action_add_queue_tail);
     drain_action_queue();
 
-        /* run all property triggers based on current state of the properties */
+    /* run all property triggers based on current state of the properties */
     queue_all_property_triggers();
     drain_action_queue();
 
-        /* enable property triggers */
+    /* enable property triggers */
     property_triggers_enabled = 1;
 
     ufds[0].fd = device_fd;
@@ -977,69 +980,69 @@ int main(int argc, char **argv)
     fd_count = 3;
 
     if (keychord_fd > 0) {
-        ufds[3].fd = keychord_fd;
-        ufds[3].events = POLLIN;
-        fd_count++;
+      ufds[3].fd = keychord_fd;
+      ufds[3].events = POLLIN;
+      fd_count++;
     } else {
-        ufds[3].events = 0;
-        ufds[3].revents = 0;
+      ufds[3].events = 0;
+      ufds[3].revents = 0;
     }
 
 #if BOOTCHART
     bootchart_count = bootchart_init();
     if (bootchart_count < 0) {
-        ERROR("bootcharting init failure\n");
+      ERROR("bootcharting init failure\n");
     } else if (bootchart_count > 0) {
-        NOTICE("bootcharting started (period=%d ms)\n", bootchart_count*BOOTCHART_POLLING_MS);
+      NOTICE("bootcharting started (period=%d ms)\n", bootchart_count*BOOTCHART_POLLING_MS);
     } else {
-        NOTICE("bootcharting ignored\n");
+      NOTICE("bootcharting ignored\n");
     }
 #endif
 
     for(;;) {
-        int nr, i, timeout = -1;
+      int nr, i, timeout = -1;
 
-        for (i = 0; i < fd_count; i++)
-            ufds[i].revents = 0;
+      for (i = 0; i < fd_count; i++)
+        ufds[i].revents = 0;
 
-        drain_action_queue();
-        restart_processes();
+      drain_action_queue();
+      restart_processes();
 
-        if (process_needs_restart) {
-            timeout = (process_needs_restart - gettime()) * 1000;
-            if (timeout < 0)
-                timeout = 0;
-        }
+      if (process_needs_restart) {
+        timeout = (process_needs_restart - gettime()) * 1000;
+        if (timeout < 0)
+          timeout = 0;
+      }
 
 #if BOOTCHART
-        if (bootchart_count > 0) {
-            if (timeout < 0 || timeout > BOOTCHART_POLLING_MS)
-                timeout = BOOTCHART_POLLING_MS;
-            if (bootchart_step() < 0 || --bootchart_count == 0) {
-                bootchart_finish();
-                bootchart_count = 0;
-            }
+      if (bootchart_count > 0) {
+        if (timeout < 0 || timeout > BOOTCHART_POLLING_MS)
+          timeout = BOOTCHART_POLLING_MS;
+        if (bootchart_step() < 0 || --bootchart_count == 0) {
+          bootchart_finish();
+          bootchart_count = 0;
         }
+      }
 #endif
-        nr = poll(ufds, fd_count, timeout);
-        if (nr <= 0)
-            continue;
+      nr = poll(ufds, fd_count, timeout);
+      if (nr <= 0)
+        continue;
 
-        if (ufds[2].revents == POLLIN) {
-            /* we got a SIGCHLD - reap and restart as needed */
-            read(signal_recv_fd, tmp, sizeof(tmp));
-            while (!wait_for_one_process(0))
-                ;
-            continue;
-        }
+      if (ufds[2].revents == POLLIN) {
+        /* we got a SIGCHLD - reap and restart as needed */
+        read(signal_recv_fd, tmp, sizeof(tmp));
+        while (!wait_for_one_process(0))
+          ;
+        continue;
+      }
 
-        if (ufds[0].revents == POLLIN)
-            handle_device_fd(device_fd);
+      if (ufds[0].revents == POLLIN)
+        handle_device_fd(device_fd);
 
-        if (ufds[1].revents == POLLIN)
-            handle_property_set_fd(property_set_fd);
-        if (ufds[3].revents == POLLIN)
-            handle_keychord(keychord_fd);
+      if (ufds[1].revents == POLLIN)
+        handle_property_set_fd(property_set_fd);
+      if (ufds[3].revents == POLLIN)
+        handle_keychord(keychord_fd);
     }
 
     return 0;
