@@ -290,8 +290,10 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
 {
     char tmp[64];
     struct stat info;
-		int n;
+    int n;
+    int rc = 0;
 
+    INFO("mount_fs %s %s %s %d %s\n",system,source,target,flags,options);
     if (!strncmp(source, "mtd@", 4)) {
         n = mtd_name_to_number(source + 4);
         if (n < 0) {
@@ -299,10 +301,10 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
         }
 
         sprintf(tmp, "/dev/mtdblock%d", n);
-        if (stat(source, &info) < 0)
+        if (stat(tmp, &info) < 0)
             sprintf(tmp, "/dev/block/mtdblock%d", n);
 
-        INFO("mount(%s,%s,%s,...)\n",tmp,target,system);
+        INFO("%s is at %s\n",source,tmp);
         if (mount(tmp, target, system, flags, options) < 0)
             return -1;
 
@@ -310,14 +312,11 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
         struct dirent *ep;
         INFO("After mount lising of %s",target);
         dp = opendir (target);
-        if (dp != NULL)
-        {
+        if (dp != NULL) {
            while ((ep = readdir (dp)))
            INFO("  %s",ep->d_name);
            (void) closedir (dp);
-        }
-        else
-        {
+        } else {
           ERROR("Couldn't open the directory errno: %d",errno);
         }
 
@@ -330,14 +329,17 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
         fd = open(source + 5, mode);
         rc = -errno;
         if (fd < 0) {
+            INFO("Could not open file %s\n",source);
             return rc;
         }
 
         for (n = 0; ; n++) {
-            sprintf(tmp, "/dev/block/loop%d", n);
+            sprintf(tmp, "/dev/loop%d", n);
+
             loop = open(tmp, mode);
             rc = -errno;
             if (loop < 0) {
+                INFO("Could not open loopback device %s\n",tmp);
                 return rc;
             }
 
@@ -351,6 +353,7 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
                         rc = -errno;
                         ioctl(loop, LOOP_CLR_FD, 0);
                         close(loop);
+                        INFO("Could not mount loopback %s\n",tmp);
                         return rc;
                     }
 
@@ -363,10 +366,12 @@ int mount_fs(char *system, char *source, char *target, unsigned flags, char *opt
         }
 
         close(fd);
+        INFO("Oups! could not mount!\n");
         ERROR("out of loopback devices");
         return -1;
     } else {
-        if (mount(source, target, system, flags, options) < 0) {
+        if(mount(source, target, system, flags, options) < 0) {
+            INFO("could not mount filesystem %s (%d)\n",source,errno);
             return -errno;
         }
 
@@ -417,6 +422,7 @@ int do_mount(int nargs, char **args)
     INFO("     system: %s", system);
     INFO("     source: %s", source);
     INFO("     target: %s", target);
+    INFO("      flags: %d", flags);
     INFO("    options: %s", options);
 
     return mount_fs(system, source, target, flags, options);
@@ -521,43 +527,62 @@ int copy_dir(char *src, char *dst)
     char next_dst[PATH_MAX];
     char next_src[PATH_MAX];
 
+
+    INFO("copy_dir '%s' => '%s'\n",src,dst);
+    memset(&src_info,0,sizeof(struct stat));
+    memset(&dst_info,0,sizeof(struct stat));
     if (src == NULL)
         return -1;
 
     if (dst == NULL)
         return -1;
 
-    if (stat(src, &src_info) < 0)
+    if (stat(src, &src_info) < 0) {
+        ERROR("copy_dir: could not get %s info\n",src);
         return -1;
+    }
 
-    if ((src_info.st_dev & S_IFMT) != S_IFDIR)
+
+    if (S_ISDIR(src_info.st_mode) != 1) {
+        ERROR("copy_dir: source %s is not a directory (info:%d - %d)!\n",src,src_info.st_mode, S_ISDIR(src_info.st_mode));
         return -1;
+    }
 
-    if(stat(dst, &dst_info) < 0)
-        if (mkdir(dst, src_info.st_mode))
+    if(stat(dst, &dst_info) < 0) {
+        INFO("copy_dir: %s directory does not exist; creating it\n",dst);
+        if (mkdir(dst, src_info.st_mode)) {
+            ERROR("copy_dir: could not create directory %s; aborting\n",dst);
             return -errno;
+        }
+    }
 
-    if (chown(dst, src_info.st_uid, src_info.st_gid))
+    if (chown(dst, src_info.st_uid, src_info.st_gid)) {
+        ERROR("copy_dir: could not make source %s and destination %s permission match\n",src,dst);
         return -errno;
+    }
 
     dp = opendir (src);
-    if (dp != NULL)
-    {
-        while ((ep = readdir (dp)))
-        {
-            memset(next_dst,0,PATH_MAX);
-            memset(next_src,0,PATH_MAX);
-            snprintf(next_dst,PATH_MAX,"%s/%s",dst,ep->d_name);
-            strncpy(next_src,ep->d_name,PATH_MAX);
-            rc = copy(next_src,next_dst);
-            if (rc != 0)
-                return rc;
+    if (dp != NULL) {
+        while ((ep = readdir (dp))) {
+            if(!(strlen(ep->d_name) == 1 && strncmp(ep->d_name,".",1) == 0) &&
+               !(strlen(ep->d_name) == 2 && strncmp(ep->d_name,"..",2) == 0) &&
+               !(strncmp(ep->d_name,"lost+found",10) == 0)) {
+                memset(next_dst,0,PATH_MAX);
+                memset(next_src,0,PATH_MAX);
+                snprintf(next_dst,PATH_MAX,"%s/%s",dst,ep->d_name);
+                snprintf(next_src,PATH_MAX,"%s/%s",src,ep->d_name);
+                rc = copy(next_src,next_dst);
+                if (rc != 0) {
+                    ERROR("copy_dir: aborting copy. Copy failed (%d)\n",rc);
+                    return rc;
+                }
+            } else {
+                INFO("Skipping copy of %s/%s\n",src,ep->d_name);
+            }
         }
         (void) closedir (dp);
-    }
-    else
-    {
-        printf("copy couldn't open the directory %s\n",src);
+    } else {
+        ERROR("copy_dir: couldn't open %s for listing\n",src);
         return -errno;
     }
 
@@ -565,8 +590,7 @@ int copy_dir(char *src, char *dst)
 }
 
 
-int copy(char *src, char *dst)
-{
+int copy(char *src, char *dst) {
     char *buffer = NULL;
     int rc = 0;
     int fd1 = -1, fd2 = -1;
@@ -574,35 +598,51 @@ int copy(char *src, char *dst)
     int brtw, brtr;
     char *p;
 
-    INFO("copy %s => %s\n",src,dst);
-
-    if (src == NULL)
+    INFO("copy '%s' => '%s'\n",src,dst);
+    memset(&info,0,sizeof(struct stat));
+    if (src == NULL) {
+        INFO("copy: source is null\n");
         return -1;
+    }
 
-    if (dst == NULL)
+    if (dst == NULL) {
+        INFO("copy: destination is null\n");
         return -1;
+    }
 
-    if (stat(src, &info) < 0)
+    if (stat(src, &info) < 0) {
+        INFO("copy: source %s does not exist\n",src);
         return -1;
+    }
 
-    if ((info.st_dev & S_IFMT) == S_IFDIR)
+    if (S_ISDIR(info.st_mode) == 1) {
+        INFO("copy: source %s is a directory handing to copy_dir (info:%d - %d)\n",src,info.st_mode,S_ISDIR(info.st_mode));
         return copy_dir(src,dst);
+    }
 
-    if ((fd1 = open(src, O_RDONLY)) < 0)
+    if ((fd1 = open(src, O_RDONLY)) < 0) {
+        INFO("copy: source %s could not be opened (errno:%d)\n",src,errno);
         goto out_err;
+    }
 
-    if ((fd2 = open(dst, O_WRONLY|O_CREAT|O_TRUNC, 0660)) < 0)
+    if ((fd2 = open(dst, O_WRONLY|O_CREAT|O_TRUNC, 0660)) < 0) {
+        INFO("copy: destination %s could not be opened (errno:%d)\n",dst,errno);
         goto out_err;
+    }
 
-    if (!(buffer = malloc(info.st_size)))
+    if (!(buffer = malloc(info.st_size))) {
+        INFO("copy: not enough memory to create copy buffer (errno:%d)\n",errno);
         goto out_err;
+    }
 
     p = buffer;
     brtr = info.st_size;
     while(brtr) {
         rc = read(fd1, p, brtr);
-        if (rc < 0)
+        if (rc < 0) {
+            INFO("copy: cannot read source %s (errno:%d)\n",src,errno);
             goto out_err;
+        }
         if (rc == 0)
             break;
         p += rc;
@@ -613,8 +653,10 @@ int copy(char *src, char *dst)
     brtw = info.st_size;
     while(brtw) {
         rc = write(fd2, p, brtw);
-        if (rc < 0)
+        if (rc < 0) {
+            INFO("copy: failed to write to destination %s (errno:%d)\n",dst,errno);
             goto out_err;
+        }
         if (rc == 0)
             break;
         p += rc;
@@ -622,13 +664,17 @@ int copy(char *src, char *dst)
     }
 
 
+    INFO("copy: making source and deastination have same permissions (%s => %s)",src,dst);
     chown(dst, info.st_uid, info.st_gid);
 
     rc = 0;
     goto out;
 out_err:
     printf("copy could not copy to %s\n",dst);
-    rc = -1;
+    if(errno > 0)
+      rc = -errno;
+    else
+      rc = -1;
 out:
     if (buffer)
         free(buffer);
@@ -733,10 +779,7 @@ int do_update(int nargs, char **args) {
     struct stat info;
     int rc = 0;
 
-    INFO("preparing update... %d\n",nargs);
-
-    /* args[0] is the command name */
-    if(nargs < 5)
+    if(nargs != 5)
        return -1;
 
     memset(&info,0,sizeof(struct stat));
@@ -745,34 +788,40 @@ int do_update(int nargs, char **args) {
     dst_fs = args[3];
     dst = args[4];
 
-    INFO("update %s %s %s %s\n",src,src_fs,dst,dst_fs);
+    INFO("update: src:(%s %s) dst:(%s %s)\n",src,src_fs,dst,dst_fs);
+
+    INFO("update: 1/3 mkdir\n");
     if(mkdir("/update",mode))
         goto error;
-
     if(mkdir("/update/src",mode))
         goto error;
-
     if(mkdir("/update/dst",mode))
         goto error;
 
-    if(mount_fs(src_fs,src,"/update/src",0,""))
+    INFO("update: 2/3 mount\n");
+    if(mount_fs(src_fs,src,"/update/src",MS_RDONLY,""))
         goto error;
 
     if(mount_fs(dst_fs,dst,"/update/dst",0,""))
         goto error;
 
     /* Do the copy */
-    if(stat("/update/src/update-disk",&info) < 0)
-        goto error;
-
-    rc = copy(src,dst);
-    goto done;
+    INFO("update: 3/3 copy\n");
+    rc = copy("/update/src", "/update/dst");
+    if(rc == 0)
+        goto done;
+    else
+        INFO("Update failed (rc=%d)",rc);
 
 error:
+    INFO("update error!");
     rc = -errno;
+    goto cleanup;
 
 done:
-    unlink("/update/dst/update-disk");
+    INFO("Update completed successfully\n");
+
+cleanup:
     umount("/update/dst");
     umount("/update/src");
     rmdir("/update/dst");
