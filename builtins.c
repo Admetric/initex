@@ -594,53 +594,58 @@ int copy(char *src, char *dst) {
     char *buffer = NULL;
     int rc = 0;
     int fd1 = -1, fd2 = -1;
-    struct stat info;
+    struct stat src_info;
+    struct stat dst_info;
     int brtw, brtr;
     char *p;
 
-    INFO("copy '%s' => '%s'\n",src,dst);
-    memset(&info,0,sizeof(struct stat));
-    if (src == NULL) {
-        INFO("copy: source is null\n");
+    INFO("copy: '%s' => '%s'\n",src,dst);
+    memset(&src_info,0,sizeof(struct stat));
+    memset(&dst_info,0,sizeof(struct stat));
+    if (src == NULL)
+        return -1;
+
+    if (dst == NULL)
+        return -1;
+
+    if (stat(src, &src_info) < 0) {
+        ERROR("copy: source %s does not exist\n",src);
         return -1;
     }
 
-    if (dst == NULL) {
-        INFO("copy: destination is null\n");
-        return -1;
-    }
-
-    if (stat(src, &info) < 0) {
-        INFO("copy: source %s does not exist\n",src);
-        return -1;
-    }
-
-    if (S_ISDIR(info.st_mode) == 1) {
-        INFO("copy: source %s is a directory handing to copy_dir (info:%d - %d)\n",src,info.st_mode,S_ISDIR(info.st_mode));
+    if (S_ISDIR(src_info.st_mode) == 1) {
+        ERROR("copy: source %s is a directory handing to copy_dir\n",src);
         return copy_dir(src,dst);
     }
 
+    /* Do not copy files of same size */
+    if(stat(dst, &dst_info) == 0)
+        if(dst_info.st_size == src_info.st_size) {
+            ERROR("Skipping copy %s and %s have the same size (%lld)\n",src, dst, src_info.st_size);
+            return 0;
+        }
+
     if ((fd1 = open(src, O_RDONLY)) < 0) {
-        INFO("copy: source %s could not be opened (errno:%d)\n",src,errno);
+        ERROR("copy: source %s could not be opened (errno:%d)\n",src,errno);
         goto out_err;
     }
 
-    if ((fd2 = open(dst, O_WRONLY|O_CREAT|O_TRUNC, 0660)) < 0) {
-        INFO("copy: destination %s could not be opened (errno:%d)\n",dst,errno);
+    if ((fd2 = open(dst, O_WRONLY|O_CREAT|O_TRUNC, src_info.st_mode)) < 0) {
+        ERROR("copy: destination %s could not be opened (errno:%d)\n",dst,errno);
         goto out_err;
     }
 
-    if (!(buffer = malloc(info.st_size))) {
-        INFO("copy: not enough memory to create copy buffer (errno:%d)\n",errno);
+    if (!(buffer = malloc(src_info.st_size))) {
+        ERROR("copy: not enough memory to create copy buffer (errno:%d)\n",errno);
         goto out_err;
     }
 
     p = buffer;
-    brtr = info.st_size;
+    brtr = src_info.st_size;
     while(brtr) {
         rc = read(fd1, p, brtr);
         if (rc < 0) {
-            INFO("copy: cannot read source %s (errno:%d)\n",src,errno);
+            ERROR("copy: cannot read source %s (errno:%d)\n",src,errno);
             goto out_err;
         }
         if (rc == 0)
@@ -650,11 +655,11 @@ int copy(char *src, char *dst) {
     }
 
     p = buffer;
-    brtw = info.st_size;
+    brtw = src_info.st_size;
     while(brtw) {
         rc = write(fd2, p, brtw);
         if (rc < 0) {
-            INFO("copy: failed to write to destination %s (errno:%d)\n",dst,errno);
+            ERROR("copy: failed to write to destination %s (errno:%d)\n",dst,errno);
             goto out_err;
         }
         if (rc == 0)
@@ -664,8 +669,14 @@ int copy(char *src, char *dst) {
     }
 
 
-    INFO("copy: making source and deastination have same permissions (%s => %s)",src,dst);
-    chown(dst, info.st_uid, info.st_gid);
+    if(chown(dst, src_info.st_uid, src_info.st_gid) < 0) {
+        ERROR("copy: cannot set ownership on destination file %s (uid:%d, gid:%d)\n", dst, src_info.st_uid, src_info.st_gid);
+        goto out_err;
+    }
+    if(chmod(dst, src_info.st_mode) < 0) {
+        ERROR("copy: cannot set permissions on destination file %s (%o)\n",dst,src_info.st_mode);
+        goto out_err;
+    }
 
     rc = 0;
     goto out;
