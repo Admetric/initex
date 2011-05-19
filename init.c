@@ -250,7 +250,7 @@ void service_start(struct service *svc, const char *dynamic_args)
 
         setpgid(0, getpid());
 
-    /* as requested, set our gid, supplemental gids, and uid */
+        /* as requested, set our gid, supplemental gids, and uid */
         if (svc->gid) {
             setgid(svc->gid);
         }
@@ -263,7 +263,7 @@ void service_start(struct service *svc, const char *dynamic_args)
 
         if (!dynamic_args) {
             if (execve(svc->args[0], (char**) svc->args, (char**) ENV) < 0) {
-                ERROR("cannot execve('%s'): %s\n", svc->args[0], strerror(errno));
+                ERROR("cannot execve('%s'): (%i) %s\n", svc->args[0], errno, strerror(errno));
             }
         } else {
             char *arg_ptrs[SVC_MAXARGS+1];
@@ -341,9 +341,20 @@ static int wait_for_one_process(int block)
     struct listnode *node;
     struct command *cmd;
 
-    while ( (pid = waitpid(-1, &status, block ? 0 : WNOHANG)) == -1 && errno == EINTR );
-    if (pid <= 0) return -1;
-    INFO("waitpid returned pid %d, status = %08x\n", pid, status);
+    while ( (pid = waitpid(-1, &status, block ? 0 : WNOHANG) ) == -1 && errno == EINTR );
+
+    /* Return if parent process */
+    if (pid <= 0)
+        return -1;
+
+    INFO("waitpid returned pid %d status=%08x errno=%d\n", pid, status, errno);
+    if (WIFEXITED(status)) {
+        INFO("pid %d exited, status=%d\n", pid, WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+        INFO("pid %d killed by signal %d\n",pid , WTERMSIG(status));
+    } else if (WIFSTOPPED(status)) {
+        INFO("pid %d stopped by signal %d\n", pid, WSTOPSIG(status));
+    }
 
     svc = service_find_by_pid(pid);
     if (!svc) {
@@ -368,12 +379,12 @@ static int wait_for_one_process(int block)
     svc->pid = 0;
     svc->flags &= (~SVC_RUNNING);
 
-        /* oneshot processes go into the disabled state on exit */
+    /* oneshot processes go into the disabled state on exit */
     if (svc->flags & SVC_ONESHOT) {
         svc->flags |= SVC_DISABLED;
     }
 
-        /* disabled processes do not get restarted automatically */
+    /* disabled processes do not get restarted automatically */
     if (svc->flags & SVC_DISABLED) {
         notify_service_state(svc->name, "stopped");
         return 0;
@@ -387,9 +398,12 @@ static int wait_for_one_process(int block)
                       "rebooting into recovery mode\n", svc->name,
                       CRITICAL_CRASH_THRESHOLD, CRITICAL_CRASH_WINDOW / 60);
                 sync();
+                /*
                 __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
                          LINUX_REBOOT_CMD_RESTART2, "recovery");
                 return 0;
+                */
+                ERROR("Giving it another chance...\n");
             }
         } else {
             svc->time_crashed = now;
@@ -460,8 +474,9 @@ static void msg_start(const char *name)
     } else {
         ERROR("no such service '%s'\n", name);
     }
-    if (tmp)
+    if (tmp) {
         free(tmp);
+    }
 }
 
 static void msg_stop(const char *name)
