@@ -550,7 +550,8 @@ int copy_dir(char *src, char *dst)
 
     if(stat(dst, &dst_info) < 0) {
         INFO("copy_dir: %s directory does not exist; creating it\n",dst);
-        if (mkdir(dst, src_info.st_mode)) {
+// WARNING ZZZZZZ danger patch to force easy access
+        if (mkdir(dst, 0775)) {
             ERROR("copy_dir: could not create directory %s; aborting\n",dst);
             return -errno;
         }
@@ -598,6 +599,7 @@ int copy(char *src, char *dst) {
     struct stat dst_info;
     int brtw, brtr;
     char *p;
+    struct stat test_info;
 
     INFO("copy: '%s' => '%s'\n",src,dst);
     memset(&src_info,0,sizeof(struct stat));
@@ -670,13 +672,18 @@ int copy(char *src, char *dst) {
 
 
     if(chown(dst, src_info.st_uid, src_info.st_gid) < 0) {
-        ERROR("copy: cannot set ownership on destination file %s (uid:%d, gid:%d)\n", dst, src_info.st_uid, src_info.st_gid);
+        ERROR("copy: cannot set ownership on destination file %s (uid:%ld, gid:%ld)\n", dst, src_info.st_uid, src_info.st_gid);
         goto out_err;
     }
-    if(chmod(dst, src_info.st_mode) < 0) {
-        ERROR("copy: cannot set permissions on destination file %s (%o)\n",dst,src_info.st_mode);
+// WARNING ZZZZZZ danger patch to force easy access
+//    if(chmod(dst, src_info.st_mode) < 0) {
+    if(chmod(dst, 0775) < 0) {
+    	ERROR("copy: cannot set permissions on destination file %s (%o)\n",dst,src_info.st_mode);
         goto out_err;
     }
+// trace
+    stat(dst, &test_info);
+    INFO("chmod: %s(%i) mode_t %o %x \n",dst, errno, test_info.st_mode, test_info.st_mode);
 
     rc = 0;
     goto out;
@@ -709,6 +716,16 @@ int do_copy(int nargs, char **args)
         return -1;
 
     return copy(args[1],args[2]);
+}
+
+int do_stat(int nargs, char**args)
+{
+	struct stat test_info;
+	int ret_value;
+
+	ret_value = stat(args[1], &test_info);
+	INFO("stat: %s, ret=%i errno=%i, mode_t=%o \n", args[1], ret_value, errno, test_info.st_mode);
+	return ret_value;
 }
 
 int do_chown(int nargs, char **args) {

@@ -161,6 +161,8 @@ void service_start(struct service *svc, const char *dynamic_args)
     pid_t pid;
     int needs_console;
     int n;
+    struct stat src_info;
+    int stat_ret;
 
         /* starting a service removes it from the disabled
          * state and immediately takes it out of the restarting
@@ -263,7 +265,15 @@ void service_start(struct service *svc, const char *dynamic_args)
 
         if (!dynamic_args) {
             if (execve(svc->args[0], (char**) svc->args, (char**) ENV) < 0) {
-                ERROR("cannot execve('%s'): (%i) %s\n", svc->args[0], errno, strerror(errno));
+            	errno = 0;
+            	stat_ret = stat(svc->args[0], &src_info);
+                ERROR("cannot execve('%s'): (%i) %s, mode_t %x, %i \n", svc->args[0], errno, strerror(errno), src_info.st_mode, stat_ret);
+                stat_ret = stat("/", &src_info);
+                ERROR("/ , ret = %i errno = %i, mode_t %o", stat_ret, errno, src_info.st_mode);
+                stat_ret = stat("/system", &src_info);
+                ERROR("/system , ret = %i errno = %i, mode_t %o", stat_ret, errno, src_info.st_mode);
+                stat_ret = stat("/system/bin", &src_info);
+                ERROR("/system/bin , ret = %i errno = %i, mode_t %o", stat_ret, errno, src_info.st_mode);
             }
         } else {
             char *arg_ptrs[SVC_MAXARGS+1];

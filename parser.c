@@ -152,6 +152,7 @@ int lookup_keyword(const char *s)
         break;
     case 'g':
         if (!strcmp(s, "roup")) return K_group;
+        if (!strcmp(s, "etstat")) return K_getstat;
         break;
     case 'h':
         if (!strcmp(s, "ostname")) return K_hostname;
